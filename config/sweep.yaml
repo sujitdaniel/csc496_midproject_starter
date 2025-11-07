@@ -1,0 +1,6 @@
+# Example sweep settings for CSC 496 mid-project
+seeds: [0, 1, 2, 3, 4]
+algos: ["ppo", "dqn"]
+steps: 200000
+obs_windows: [3, 5]
+notes: "Quick sweep for mid-project curves"
