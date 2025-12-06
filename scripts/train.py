@@ -51,14 +51,67 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
     venv = make_vec_env(seed=args.seed, monitor_dir=log_dir, **env_kwargs)
 
+    # ----------------- Model selection & hyperparameters -----------------
+    # We keep most settings close to SB3 defaults, but we make key
+    # hyperparameters explicit so they are easy to report.
+
     if args.algo == "ppo":
-        model = PPO(MlpPolicy, venv, verbose=1, seed=args.seed)
+        # PPO with MLP policy on vectorized env
+        model = PPO(
+            MlpPolicy,
+            venv,
+            learning_rate=3e-4,
+            n_steps=2048,
+            batch_size=64,
+            n_epochs=10,
+            gamma=0.99,
+            gae_lambda=0.95,
+            clip_range=0.2,        # <-- PPO clip range (report this)
+            ent_coef=0.0,
+            vf_coef=0.5,
+            max_grad_norm=0.5,
+            verbose=1,
+            seed=args.seed,
+        )
+
     elif args.algo == "dqn":
-        model = DQN("MlpPolicy", venv, verbose=1, seed=args.seed, tensorboard_log=None)
+        # DQN with epsilon-greedy exploration
+        model = DQN(
+            "MlpPolicy",
+            venv,
+            learning_rate=1e-4,
+            buffer_size=100_000,
+            batch_size=64,
+            gamma=0.99,
+            target_update_interval=1_000,
+            train_freq=1,
+            gradient_steps=1,
+            exploration_initial_eps=1.0,   # <-- eps-greedy starts at 1.0
+            exploration_final_eps=0.05,    # <-- decays to 0.05
+            exploration_fraction=0.1,      # <-- over first 10% of training
+            verbose=1,
+            seed=args.seed,
+            tensorboard_log=None,
+        )
+
     else:
         if not HAVE_RPPO:
-            raise RuntimeError("sb3-contrib not installed. `pip install sb3-contrib` to use RecurrentPPO.")
-        model = RecurrentPPO("MlpLstmPolicy", venv, verbose=1, seed=args.seed)
+            raise RuntimeError(
+                "sb3-contrib not installed. `pip install sb3-contrib` to use RecurrentPPO."
+            )
+        model = RecurrentPPO(
+            "MlpLstmPolicy",
+            venv,
+            learning_rate=3e-4,
+            n_steps=1024,
+            batch_size=64,
+            n_epochs=10,
+            gamma=0.99,
+            gae_lambda=0.95,
+            clip_range=0.2,
+            verbose=1,
+            seed=args.seed,
+        )
 
     model_path = os.path.join(args.outdir, "models", run_name)
     model.learn(total_timesteps=args.steps, progress_bar=True)

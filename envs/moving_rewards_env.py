@@ -10,6 +10,97 @@ from gymnasium import spaces
 from typing import Tuple, Optional, Dict, Any
 
 class MovingRewardsGridEnv(gym.Env):
+    """
+    Non-stationary gridworld with moving, aging resources for CSC 496.
+
+    MDP definition (default values in parentheses):
+
+    State (not directly observed by the agent)
+    -----------------------------------------
+    - The true state s_t includes:
+      * Agent position (integer (y, x) inside a 15x15 grid with border walls).
+      * A set of up to n_resources=10 resources, each with
+        (y_i, x_i, age_i, lifetime_i). Each resource's lifetime_i is
+        initialized to resource_lifetime=80.
+      * An internal step counter t in {0, ..., max_steps-1} with max_steps=200.
+
+    Observation o_t
+    ----------------
+    - The agent does not see the full grid. Instead it receives an
+      egocentric obs_window x obs_window x 3 tensor centered on the agent
+      (default obs_window=5):
+      * Channel 0: 1 if the cell is a wall, 0 otherwise.
+      * Channel 1: 1 if a resource occupies that cell, 0 otherwise.
+      * Channel 2: normalized resource age (age / lifetime) for any
+        resource present in that cell (0 if none).
+
+    Actions a_t
+    -----------
+    - Discrete(5), encoded as:
+      * 0 = move up    (-1, 0)
+      * 1 = move down  (+1, 0)
+      * 2 = move left  (0, -1)
+      * 3 = move right (0, +1)
+      * 4 = stay in place
+
+    Transition dynamics
+    -------------------
+    Given action a_t at step t:
+
+    1. Increment the internal step counter.
+
+    2. Attempt to move the agent according to a_t:
+       - If the target cell is inside the grid and not a wall, the agent
+         moves there.
+       - Otherwise the agent stays in place (this is treated as a wall hit
+         unless a_t == 4, i.e., "stay").
+
+    3. Resource collection:
+       - If the agent's new cell contains a resource, that resource is
+         removed and the agent receives a collection reward.
+       - A new resource with age = 0 and lifetime = resource_lifetime is
+         spawned at a random free cell (keeps overall density roughly stable).
+
+    4. Resource drift:
+       - Each remaining resource independently "drifts" with probability
+         drift_prob (default 0.6).
+       - When drifting, the resource samples a random primitive action
+         (up/down/left/right). If the target cell is free (not a wall),
+         the resource moves there; otherwise it stays in place.
+
+    5. Aging and expiration:
+       - All resources increase their age by 1.
+       - Any resource whose age >= lifetime is removed permanently (there is
+         no automatic respawn due to aging).
+
+    6. Completion bonus:
+       - If, after aging, self.resources is empty, a completion bonus is
+         added to the reward for that step. The episode still continues
+         until the time limit.
+
+    Reward r_t
+    ----------
+    The reward at each step is the sum of:
+
+    - -step_penalty (default 0.01) every step.
+
+    - -wall_penalty (default 0.1) if the agent attempted to move into a wall
+      (i.e., its position did not change and the action was not "stay").
+
+    - +collect_reward (default 1.0) if the agent collected a resource on this
+      step.
+
+    - +completion_bonus (default 0.5) whenever there are no resources
+      remaining after the aging step.
+
+    Episode termination
+    -------------------
+    - terminated is always False (this is a continuing task).
+
+    - truncated is True when step counter >= max_steps (default 200).
+      In other words, episodes end only due to the fixed time horizon
+      max_steps, not because resources run out.
+    """
     metadata = {"render_modes": ["ansi"], "render_fps": 4}
 
     def __init__(
