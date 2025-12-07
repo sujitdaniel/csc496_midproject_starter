@@ -88,7 +88,7 @@ def plot_env_layout(
     )
 
     plt.tight_layout()
-    plt.savefig(save_path, dpi=200)
+    plt.savefig(save_path, bbox_inches="tight", dpi=150)
     plt.close()
     print(f"Saved environment layout figure to: {save_path}")
 
